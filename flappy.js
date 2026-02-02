@@ -1,6 +1,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Vogel eigenschappen
 const bird = {
     x: 50,
     y: 300,
@@ -11,18 +12,22 @@ const bird = {
     velocity: 0
 };
 
+// Pijpen
 const pipes = [];
 const pipeWidth = 50;
 const pipeGap = 150;
+
 let frame = 0;
 let score = 0;
 let gameOver = false;
 
+// Tekenen van de vogel
 function drawBird() {
     ctx.fillStyle = 'yellow';
     ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
 }
 
+// Tekenen van de pijpen
 function drawPipes() {
     ctx.fillStyle = 'green';
     pipes.forEach(pipe => {
@@ -31,6 +36,7 @@ function drawPipes() {
     });
 }
 
+// Nieuwe pijpen genereren
 function generatePipes() {
     if (frame % 90 === 0) {
         const top = Math.random() * (canvas.height - pipeGap - 50) + 25;
@@ -39,6 +45,7 @@ function generatePipes() {
     }
 }
 
+// Pijpen bewegen en score bijhouden
 function updatePipes() {
     pipes.forEach(pipe => pipe.x -= 2);
     if (pipes.length && pipes[0].x + pipeWidth < 0) {
@@ -47,6 +54,7 @@ function updatePipes() {
     }
 }
 
+// Botsing checken
 function checkCollision() {
     for (let pipe of pipes) {
         if (
@@ -62,21 +70,23 @@ function checkCollision() {
     }
 }
 
+// Score tekenen
 function drawScore() {
     ctx.fillStyle = 'white';
     ctx.font = '30px Arial';
     ctx.fillText("Score: " + score, 10, 40);
 }
 
+// Spel update
 function update() {
     if (gameOver) {
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.fillStyle = 'white';
         ctx.font = '40px Arial';
-        ctx.fillText('Game Over', 100, 300);
+        ctx.fillText('Game Over', 80, 300);
         ctx.font = '20px Arial';
-        ctx.fillText('Refresh om opnieuw te starten', 80, 350);
+        ctx.fillText('Refresh om opnieuw te starten', 60, 350);
         return;
     }
 
@@ -97,9 +107,9 @@ function update() {
     requestAnimationFrame(update);
 }
 
+// Vogel laten springen
 document.addEventListener('keydown', () => {
     bird.velocity = bird.lift;
 });
 
 update();
-
