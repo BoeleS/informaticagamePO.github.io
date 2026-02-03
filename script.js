@@ -1,42 +1,41 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// UI
 const ammoUI = document.getElementById('ammo');
 const scoreUI = document.getElementById('score');
-const healthUI = document.getElementById('health');
 const gameOverUI = document.getElementById('gameOver');
+
+let mouse = {x:0,y:0};
 
 // PLAYER
 let player = {
-    x: canvas.width/2,
-    y: canvas.height/2,
-    width: 40,
-    height: 40,
+    x: 400,
+    y: 300,
     health: 100,
-    speed: 4,
     ammo: 12,
     maxAmmo: 12,
-    canShoot: true
+    speed: 4
 };
 
-// BULLETS
 let bullets = [];
-
-// ENEMIES
 let enemies = [];
 let score = 0;
-
 let keys = {};
 
-document.addEventListener("keydown", e => {
-    keys[e.key.toLowerCase()] = true;
-
-    if(e.key === "r") reload();
-    if(e.key === "Enter" && player.health <= 0) restartGame();
+canvas.addEventListener("mousemove", e=>{
+    let rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
 });
 
-document.addEventListener("keyup", e => {
+document.addEventListener("keydown", e=>{
+    keys[e.key.toLowerCase()] = true;
+
+    if(e.key==="r") player.ammo = player.maxAmmo;
+    if(e.key==="Enter" && player.health <=0) restartGame();
+});
+
+document.addEventListener("keyup", e=>{
     keys[e.key.toLowerCase()] = false;
 });
 
@@ -44,19 +43,19 @@ canvas.addEventListener("click", shoot);
 
 // ---------------- LOOP ----------------
 
-function gameLoop(){
+function loop(){
     update();
     draw();
-    requestAnimationFrame(gameLoop);
+    requestAnimationFrame(loop);
 }
 
-requestAnimationFrame(gameLoop);
+loop();
 
 // ---------------- UPDATE ----------------
 
 function update(){
 
-    if(player.health <= 0) return;
+    if(player.health <=0) return;
 
     // Movement
     if(keys["w"]) player.y -= player.speed;
@@ -65,20 +64,19 @@ function update(){
     if(keys["d"]) player.x += player.speed;
 
     // Spawn enemies
-    if(Math.random() < 0.01) spawnEnemy();
+    if(Math.random() < 0.015) spawnEnemy();
 
     // Bullets
-    bullets.forEach((b, i) => {
-
+    bullets.forEach((b,i)=>{
         b.x += b.vx;
         b.y += b.vy;
 
-        enemies.forEach((enemy, j) => {
-            if(rectCollision(b, enemy)){
+        enemies.forEach((enemy,j)=>{
+            if(distance(b,enemy) < 18){
                 enemy.health -= 10;
                 bullets.splice(i,1);
 
-                if(enemy.health <= 0){
+                if(enemy.health <=0){
                     enemies.splice(j,1);
                     score++;
                 }
@@ -87,8 +85,7 @@ function update(){
     });
 
     // Enemy movement
-    enemies.forEach((enemy, i) => {
-
+    enemies.forEach((enemy,i)=>{
         let dx = player.x - enemy.x;
         let dy = player.y - enemy.y;
         let dist = Math.sqrt(dx*dx + dy*dy);
@@ -96,19 +93,16 @@ function update(){
         enemy.x += dx/dist * enemy.speed;
         enemy.y += dy/dist * enemy.speed;
 
-        // Damage player bij aanraken
-        if(rectCollision(enemy, player)){
+        if(distance(enemy,player) < 25){
             player.health -= 10;
             enemies.splice(i,1);
         }
     });
 
-    // UI
     ammoUI.textContent = `Ammo: ${player.ammo}`;
     scoreUI.textContent = `Score: ${score}`;
-    healthUI.textContent = `Health: ${player.health}`;
 
-    if(player.health <= 0){
+    if(player.health <=0){
         gameOverUI.style.display = "block";
     }
 }
@@ -117,98 +111,154 @@ function update(){
 
 function draw(){
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // Background grid
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // ===== PLAYER POPPETJE =====
+    drawGrid();
+
     drawPlayer();
 
-    // ===== BULLETS =====
-    ctx.fillStyle = "yellow";
-    bullets.forEach(b => {
-        ctx.fillRect(b.x,b.y,5,5);
-    });
+    bullets.forEach(drawBullet);
 
-    // ===== ENEMIES =====
-    enemies.forEach(enemy => drawEnemy(enemy));
+    enemies.forEach(drawEnemy);
 
-    // ===== PLAYER HEALTH ONDERIN =====
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(`Levens: ${player.health}`, canvas.width/2, canvas.height - 20);
+    drawPlayerHealth();
 }
 
-// ---------------- PLAYER TEKENEN ----------------
+// ---------------- GRID ----------------
+
+function drawGrid(){
+    ctx.strokeStyle = "#1a1a1a";
+
+    for(let i=0;i<canvas.width;i+=40){
+        ctx.beginPath();
+        ctx.moveTo(i,0);
+        ctx.lineTo(i,canvas.height);
+        ctx.stroke();
+    }
+
+    for(let i=0;i<canvas.height;i+=40){
+        ctx.beginPath();
+        ctx.moveTo(0,i);
+        ctx.lineTo(canvas.width,i);
+        ctx.stroke();
+    }
+}
+
+// ---------------- PLAYER ----------------
 
 function drawPlayer(){
 
+    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(angle);
+
     // Body
-    ctx.fillStyle = "blue";
+    ctx.fillStyle = "#2a8cff";
     ctx.beginPath();
-    ctx.arc(player.x, player.y, 20, 0, Math.PI*2);
+    ctx.arc(0,0,18,0,Math.PI*2);
     ctx.fill();
 
-    // Wapen
-    ctx.fillStyle = "gray";
-    ctx.fillRect(player.x + 15, player.y - 5, 25, 10);
+    // Head
+    ctx.fillStyle = "#ffd6a5";
+    ctx.beginPath();
+    ctx.arc(0,-25,12,0,Math.PI*2);
+    ctx.fill();
+
+    // Gun
+    ctx.fillStyle = "#555";
+    ctx.fillRect(10,-4,28,8);
+
+    ctx.fillStyle = "#222";
+    ctx.fillRect(35,-2,8,4);
+
+    ctx.restore();
 }
 
-// ---------------- ENEMY TEKENEN ----------------
+// ---------------- PLAYER HEALTH ----------------
+
+function drawPlayerHealth(){
+
+    ctx.textAlign = "center";
+
+    // Background bar
+    ctx.fillStyle = "#333";
+    ctx.fillRect(canvas.width/2 -150, canvas.height-40,300,25);
+
+    // Health bar
+    ctx.fillStyle = "#00ff88";
+    ctx.fillRect(canvas.width/2 -150, canvas.height-40,300*(player.health/100),25);
+
+    // Text
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+    ctx.fillText(`LEVEN: ${player.health}`, canvas.width/2, canvas.height-20);
+}
+
+// ---------------- ENEMY ----------------
 
 function drawEnemy(enemy){
 
     // Monster body
-    ctx.fillStyle = "red";
+    ctx.fillStyle = "#ff2a2a";
     ctx.beginPath();
-    ctx.arc(enemy.x, enemy.y, 15, 0, Math.PI*2);
+    ctx.arc(enemy.x, enemy.y, 16, 0, Math.PI*2);
     ctx.fill();
 
-    // Ogen
+    // Eyes
     ctx.fillStyle = "white";
     ctx.beginPath();
-    ctx.arc(enemy.x-5, enemy.y-3, 3, 0, Math.PI*2);
-    ctx.arc(enemy.x+5, enemy.y-3, 3, 0, Math.PI*2);
+    ctx.arc(enemy.x-5, enemy.y-4, 3, 0, Math.PI*2);
+    ctx.arc(enemy.x+5, enemy.y-4, 3, 0, Math.PI*2);
     ctx.fill();
 
-    // Levens boven hoofd
-    ctx.fillStyle = "white";
-    ctx.font = "14px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(enemy.health, enemy.x, enemy.y - 25);
+    // Mouth
+    ctx.strokeStyle = "black";
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y+2, 6, 0, Math.PI);
+    ctx.stroke();
+
+    // Health bar
+    ctx.fillStyle = "#333";
+    ctx.fillRect(enemy.x-15, enemy.y-28,30,5);
+
+    ctx.fillStyle = "#00ff88";
+    ctx.fillRect(enemy.x-15, enemy.y-28,30*(enemy.health/20),5);
+}
+
+// ---------------- BULLET ----------------
+
+function drawBullet(b){
+    ctx.fillStyle = "yellow";
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,4,0,Math.PI*2);
+    ctx.fill();
 }
 
 // ---------------- SHOOT ----------------
 
-function shoot(event){
+function shoot(){
 
-    if(player.ammo <= 0 || !player.canShoot || player.health <= 0) return;
+    if(player.ammo <=0 || player.health<=0) return;
 
-    let rect = canvas.getBoundingClientRect();
-
-    let mouseX = event.clientX - rect.left;
-    let mouseY = event.clientY - rect.top;
-
-    let dx = mouseX - player.x;
-    let dy = mouseY - player.y;
+    let dx = mouse.x-player.x;
+    let dy = mouse.y-player.y;
     let dist = Math.sqrt(dx*dx + dy*dy);
 
     bullets.push({
         x: player.x,
         y: player.y,
-        vx: dx/dist * 8,
-        vy: dy/dist * 8
+        vx: dx/dist*8,
+        vy: dy/dist*8
     });
 
     player.ammo--;
 }
 
-// ---------------- RELOAD ----------------
-
-function reload(){
-    player.ammo = player.maxAmmo;
-}
-
-// ---------------- SPAWN ENEMY ----------------
+// ---------------- ENEMY SPAWN ----------------
 
 function spawnEnemy(){
 
@@ -216,28 +266,21 @@ function spawnEnemy(){
         x: Math.random()*canvas.width,
         y: -20,
         health: 20,
-        speed: 1.5,
-        width: 30,
-        height: 30
+        speed: 1.5
     });
 }
 
-// ---------------- COLLISION ----------------
+// ---------------- UTILS ----------------
 
-function rectCollision(a,b){
-    return Math.abs(a.x - b.x) < 20 &&
-           Math.abs(a.y - b.y) < 20;
+function distance(a,b){
+    return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
 }
 
-// ---------------- RESTART ----------------
-
 function restartGame(){
-
     player.health = 100;
     player.ammo = player.maxAmmo;
-    enemies = [];
     bullets = [];
+    enemies = [];
     score = 0;
-
     gameOverUI.style.display = "none";
 }
