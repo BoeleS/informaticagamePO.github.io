@@ -16,9 +16,6 @@ let powerupInterval = 15; // seconden
 let ammoUI = document.getElementById("ammo");
 let gameOverUI = document.getElementById("gameover");
 
-// ---------- PAUSE ----------
-let paused = false;
-
 // ---------- WAVES ----------
 let waves = [
     {type:"normal", duration:60},    // Wave 1
@@ -64,7 +61,7 @@ function spawnPowerup(){
 
 // ---------- UPDATE ----------
 function update(){
-    if(player.health<=0 || paused) return;
+    if(player.health<=0) return;
 
     // Player movement
     if(keys["w"]) player.y -= player.speed;
@@ -93,7 +90,7 @@ function update(){
         }
     } else {
         restTimer += 1/60;
-        if(restTimer >= 15){ // nu 15 seconden rust
+        if(restTimer >= 10){
             inRest = false;
             waveText = "";
             currentWave++;
@@ -137,7 +134,7 @@ function update(){
 
         if(dist(enemy,player)<25){
             player.health -= enemy.damage || 10;
-            if(enemy.type !== "spiderweb") enemies.splice(i,1); // spinnen blijven leven
+            enemies.splice(i,1);
         }
     });
 
@@ -220,24 +217,7 @@ function draw(){
         ctx.textAlign="center";
         ctx.fillText(waveText,400,300);
     }
-
-    // Pauzeerknop linksboven
-    ctx.fillStyle = paused ? "red" : "green";
-    ctx.fillRect(10,10,80,40);
-    ctx.fillStyle = "white";
-    ctx.font = "20px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(paused?"PAUSED":"PAUSE",50,35);
 }
-
-// ---------- MOUSE CLICK ----------
-canvas.addEventListener("click", e=>{
-    let mx = e.offsetX;
-    let my = e.offsetY;
-    if(mx>=10 && mx<=90 && my>=10 && my<=50){
-        paused = !paused;
-    }
-});
 
 // ---------- GAME LOOP ----------
 function loop(){
