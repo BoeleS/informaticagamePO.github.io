@@ -19,12 +19,15 @@ let player = {
     health:100,
     ammo:12,
     maxAmmo:12,
-    speed:3
+    speed:3,
+    oneShot:false,
+    oneShotTimer:0
 };
 
 let keys = {};
 let bullets = [];
 let enemies = [];
+let powerups = [];
 
 document.addEventListener("keydown", e=>{
     keys[e.key.toLowerCase()] = true;
@@ -54,14 +57,21 @@ function update(){
 
     if(player.health<=0) return;
 
-    // Movement
     if(keys["w"]) player.y -= player.speed;
     if(keys["s"]) player.y += player.speed;
     if(keys["a"]) player.x -= player.speed;
     if(keys["d"]) player.x += player.speed;
 
-    // Spawn enemies
     if(Math.random()<0.02) spawnEnemy();
+    if(Math.random()<0.005) spawnPowerup();
+
+    // ONE SHOT TIMER
+    if(player.oneShot){
+        player.oneShotTimer -= 1/60;
+        if(player.oneShotTimer <=0){
+            player.oneShot=false;
+        }
+    }
 
     bullets.forEach((b,i)=>{
         b.x += b.vx;
@@ -69,7 +79,13 @@ function update(){
 
         enemies.forEach((enemy,j)=>{
             if(dist(b,enemy)<18){
-                enemy.health -=10;
+
+                if(player.oneShot){
+                    enemy.health = 0;
+                }else{
+                    enemy.health -=10;
+                }
+
                 bullets.splice(i,1);
 
                 if(enemy.health<=0){
@@ -93,6 +109,23 @@ function update(){
         }
     });
 
+    // POWERUP PICKUP
+    powerups.forEach((p,i)=>{
+        if(dist(p,player)<30){
+
+            if(p.type==="health"){
+                player.health = Math.min(100, player.health+50);
+            }
+
+            if(p.type==="damage"){
+                player.oneShot = true;
+                player.oneShotTimer = 10;
+            }
+
+            powerups.splice(i,1);
+        }
+    });
+
     ammoUI.textContent = "Ammo: " + player.ammo;
 
     if(player.health<=0){
@@ -112,13 +145,14 @@ function draw(){
 
     enemies.forEach(drawEnemy);
 
+    powerups.forEach(drawPowerup);
+
     drawHealthBar();
 }
 
 // -------- BACKGROUND --------
 
 function drawBackground(){
-
     let gradient = ctx.createLinearGradient(0,0,0,canvas.height);
     gradient.addColorStop(0,"#020024");
     gradient.addColorStop(1,"#090979");
@@ -137,30 +171,24 @@ function drawPlayer(){
     ctx.translate(player.x,player.y);
     ctx.rotate(angle);
 
-    // BENEN
     ctx.fillStyle="blue";
     ctx.fillRect(-6,12,5,15);
     ctx.fillRect(1,12,5,15);
 
-    // LICHAAM
     ctx.fillRect(-10,-10,20,25);
 
-    // ARMEN
     ctx.fillRect(-15,-5,10,4);
     ctx.fillRect(5,-5,10,4);
 
-    // HOOFD
     ctx.fillStyle="#ffd1a6";
     ctx.beginPath();
     ctx.arc(0,-18,10,0,Math.PI*2);
     ctx.fill();
 
-    // GEZICHT
     ctx.fillStyle="black";
     ctx.fillRect(-3,-20,2,2);
     ctx.fillRect(1,-20,2,2);
 
-    // WAPEN
     ctx.fillStyle="gray";
     ctx.fillRect(10,-3,28,6);
 
@@ -171,24 +199,19 @@ function drawPlayer(){
 
 function drawEnemy(enemy){
 
-    // BENEN
     ctx.fillStyle="darkred";
     ctx.fillRect(enemy.x-5,enemy.y+10,4,12);
     ctx.fillRect(enemy.x+1,enemy.y+10,4,12);
 
-    // LICHAAM
     ctx.fillRect(enemy.x-10,enemy.y-10,20,20);
 
-    // ARMEN
     ctx.fillRect(enemy.x-18,enemy.y-5,8,4);
     ctx.fillRect(enemy.x+10,enemy.y-5,8,4);
 
-    // HOOFD
     ctx.beginPath();
     ctx.arc(enemy.x,enemy.y-18,10,0,Math.PI*2);
     ctx.fill();
 
-    // ENG GEZICHT
     ctx.fillStyle="black";
     ctx.fillRect(enemy.x-4,enemy.y-20,3,3);
     ctx.fillRect(enemy.x+1,enemy.y-20,3,3);
@@ -197,7 +220,6 @@ function drawEnemy(enemy){
     ctx.arc(enemy.x,enemy.y-14,5,0,Math.PI);
     ctx.stroke();
 
-    // HEALTH BAR
     ctx.fillStyle="black";
     ctx.fillRect(enemy.x-15,enemy.y-35,30,5);
 
@@ -205,10 +227,34 @@ function drawEnemy(enemy){
     ctx.fillRect(enemy.x-15,enemy.y-35,30*(enemy.health/20),5);
 }
 
+// -------- POWERUPS --------
+
+function drawPowerup(p){
+
+    if(p.type==="health"){
+        ctx.fillStyle="green";
+        ctx.fillRect(p.x-15,p.y-15,30,30);
+
+        ctx.fillStyle="white";
+        ctx.font="14px Arial";
+        ctx.textAlign="center";
+        ctx.fillText("+50",p.x,p.y+5);
+    }
+
+    if(p.type==="damage"){
+        ctx.fillStyle="red";
+        ctx.fillRect(p.x-15,p.y-15,30,30);
+
+        ctx.fillStyle="white";
+        ctx.font="14px Arial";
+        ctx.textAlign="center";
+        ctx.fillText("+10",p.x,p.y+5);
+    }
+}
+
 // -------- LASER --------
 
 function drawLaser(b){
-
     ctx.strokeStyle="cyan";
     ctx.lineWidth=3;
 
@@ -218,7 +264,7 @@ function drawLaser(b){
     ctx.stroke();
 }
 
-// -------- PLAYER HEALTH BAR --------
+// -------- HEALTH BAR --------
 
 function drawHealthBar(){
 
@@ -254,7 +300,7 @@ function shoot(){
     player.ammo--;
 }
 
-// -------- ENEMY SPAWN --------
+// -------- SPAWN --------
 
 function spawnEnemy(){
     enemies.push({
@@ -265,7 +311,18 @@ function spawnEnemy(){
     });
 }
 
-// -------- UTIL --------
+function spawnPowerup(){
+
+    let type = Math.random()<0.5 ? "health" : "damage";
+
+    powerups.push({
+        x:Math.random()*canvas.width,
+        y:Math.random()*canvas.height,
+        type:type
+    });
+}
+
+// -------- UTILS --------
 
 function dist(a,b){
     return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
@@ -274,7 +331,9 @@ function dist(a,b){
 function restart(){
     player.health=100;
     player.ammo=12;
+    player.oneShot=false;
     enemies=[];
     bullets=[];
+    powerups=[];
     gameOverUI.style.display="none";
 }
