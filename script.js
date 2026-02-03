@@ -1,225 +1,243 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// UI elements
-const healthUI = document.getElementById('health');
+// UI
 const ammoUI = document.getElementById('ammo');
 const scoreUI = document.getElementById('score');
+const healthUI = document.getElementById('health');
 const gameOverUI = document.getElementById('gameOver');
 
-// Player
+// PLAYER
 let player = {
     x: canvas.width/2,
     y: canvas.height/2,
-    width: 30,
-    height: 30,
-    color: 'blue',
+    width: 40,
+    height: 40,
     health: 100,
-    speed: 5,
+    speed: 4,
     ammo: 12,
     maxAmmo: 12,
-    reloadTime: 1000, // in ms
     canShoot: true
 };
 
-// Bullets
+// BULLETS
 let bullets = [];
 
-// Enemies
+// ENEMIES
 let enemies = [];
-let enemySpawnInterval = 2000;
-let lastEnemySpawn = 0;
 let score = 0;
 
-// Controls
 let keys = {};
-document.addEventListener('keydown', e => {
+
+document.addEventListener("keydown", e => {
     keys[e.key.toLowerCase()] = true;
-    if(e.key === 'r') reload();
-    if(e.key === 'Enter' && player.health <= 0) restartGame();
-});
-document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-// Shoot with mouse
-canvas.addEventListener('click', () => {
-    shoot();
+    if(e.key === "r") reload();
+    if(e.key === "Enter" && player.health <= 0) restartGame();
 });
 
-// Game loop
-let lastTime = 0;
-function gameLoop(timestamp) {
-    let deltaTime = timestamp - lastTime;
-    lastTime = timestamp;
+document.addEventListener("keyup", e => {
+    keys[e.key.toLowerCase()] = false;
+});
 
-    update(deltaTime);
+canvas.addEventListener("click", shoot);
+
+// ---------------- LOOP ----------------
+
+function gameLoop(){
+    update();
     draw();
-
     requestAnimationFrame(gameLoop);
 }
 
 requestAnimationFrame(gameLoop);
 
-// Functions
-function update(dt) {
+// ---------------- UPDATE ----------------
+
+function update(){
+
     if(player.health <= 0) return;
 
     // Movement
-    if(keys['w']) player.y -= player.speed;
-    if(keys['s']) player.y += player.speed;
-    if(keys['a']) player.x -= player.speed;
-    if(keys['d']) player.x += player.speed;
+    if(keys["w"]) player.y -= player.speed;
+    if(keys["s"]) player.y += player.speed;
+    if(keys["a"]) player.x -= player.speed;
+    if(keys["d"]) player.x += player.speed;
 
-    // Boundaries
-    if(player.x < 0) player.x = 0;
-    if(player.x > canvas.width - player.width) player.x = canvas.width - player.width;
-    if(player.y < 0) player.y = 0;
-    if(player.y > canvas.height - player.height) player.y = canvas.height - player.height;
+    // Spawn enemies
+    if(Math.random() < 0.01) spawnEnemy();
 
-    // Update bullets
+    // Bullets
     bullets.forEach((b, i) => {
+
         b.x += b.vx;
         b.y += b.vy;
 
-        // Remove if off-screen
-        if(b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(i,1);
-
-        // Check collision with enemies
         enemies.forEach((enemy, j) => {
-            if(rectCollision(b, enemy)) {
+            if(rectCollision(b, enemy)){
                 enemy.health -= 10;
                 bullets.splice(i,1);
-                if(enemy.health <= 0) {
+
+                if(enemy.health <= 0){
                     enemies.splice(j,1);
-                    score += 1;
+                    score++;
                 }
             }
         });
     });
 
-    // Spawn enemies
-    if(performance.now() - lastEnemySpawn > enemySpawnInterval) {
-        spawnEnemy();
-        lastEnemySpawn = performance.now();
-    }
+    // Enemy movement
+    enemies.forEach((enemy, i) => {
 
-    // Move enemies
-    enemies.forEach(enemy => {
         let dx = player.x - enemy.x;
         let dy = player.y - enemy.y;
         let dist = Math.sqrt(dx*dx + dy*dy);
-        enemy.x += (dx/dist) * enemy.speed;
-        enemy.y += (dy/dist) * enemy.speed;
 
-        // Damage player
-        if(rectCollision(enemy, player)) {
+        enemy.x += dx/dist * enemy.speed;
+        enemy.y += dy/dist * enemy.speed;
+
+        // Damage player bij aanraken
+        if(rectCollision(enemy, player)){
             player.health -= 10;
-            enemies.splice(enemies.indexOf(enemy),1);
+            enemies.splice(i,1);
         }
     });
 
-    // Update UI
-    healthUI.textContent = `Health: ${player.health}`;
-    ammoUI.textContent = `Ammo: ${player.ammo}/${player.maxAmmo}`;
+    // UI
+    ammoUI.textContent = `Ammo: ${player.ammo}`;
     scoreUI.textContent = `Score: ${score}`;
+    healthUI.textContent = `Health: ${player.health}`;
 
-    if(player.health <= 0) {
-        gameOverUI.style.display = 'block';
+    if(player.health <= 0){
+        gameOverUI.style.display = "block";
     }
 }
 
-function draw() {
+// ---------------- DRAW ----------------
+
+function draw(){
+
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // Player
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // ===== PLAYER POPPETJE =====
+    drawPlayer();
 
-    // Bullets
-    ctx.fillStyle = 'yellow';
-    bullets.forEach(b => ctx.fillRect(b.x, b.y, 5, 5));
-
-    // Enemies
-    enemies.forEach(e => {
-        ctx.fillStyle = e.color;
-        ctx.fillRect(e.x, e.y, e.width, e.height);
+    // ===== BULLETS =====
+    ctx.fillStyle = "yellow";
+    bullets.forEach(b => {
+        ctx.fillRect(b.x,b.y,5,5);
     });
+
+    // ===== ENEMIES =====
+    enemies.forEach(enemy => drawEnemy(enemy));
+
+    // ===== PLAYER HEALTH ONDERIN =====
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(`Levens: ${player.health}`, canvas.width/2, canvas.height - 20);
 }
 
-function shoot() {
-    if(!player.canShoot || player.ammo <= 0 || player.health <= 0) return;
+// ---------------- PLAYER TEKENEN ----------------
 
-    // Shoot bullet towards mouse
+function drawPlayer(){
+
+    // Body
+    ctx.fillStyle = "blue";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, 20, 0, Math.PI*2);
+    ctx.fill();
+
+    // Wapen
+    ctx.fillStyle = "gray";
+    ctx.fillRect(player.x + 15, player.y - 5, 25, 10);
+}
+
+// ---------------- ENEMY TEKENEN ----------------
+
+function drawEnemy(enemy){
+
+    // Monster body
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, 15, 0, Math.PI*2);
+    ctx.fill();
+
+    // Ogen
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(enemy.x-5, enemy.y-3, 3, 0, Math.PI*2);
+    ctx.arc(enemy.x+5, enemy.y-3, 3, 0, Math.PI*2);
+    ctx.fill();
+
+    // Levens boven hoofd
+    ctx.fillStyle = "white";
+    ctx.font = "14px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(enemy.health, enemy.x, enemy.y - 25);
+}
+
+// ---------------- SHOOT ----------------
+
+function shoot(event){
+
+    if(player.ammo <= 0 || !player.canShoot || player.health <= 0) return;
+
     let rect = canvas.getBoundingClientRect();
+
     let mouseX = event.clientX - rect.left;
     let mouseY = event.clientY - rect.top;
 
-    let dx = mouseX - (player.x + player.width/2);
-    let dy = mouseY - (player.y + player.height/2);
+    let dx = mouseX - player.x;
+    let dy = mouseY - player.y;
     let dist = Math.sqrt(dx*dx + dy*dy);
-    let speed = 10;
 
     bullets.push({
-        x: player.x + player.width/2,
-        y: player.y + player.height/2,
-        vx: (dx/dist)*speed,
-        vy: (dy/dist)*speed,
+        x: player.x,
+        y: player.y,
+        vx: dx/dist * 8,
+        vy: dy/dist * 8
     });
 
-    player.ammo -= 1;
+    player.ammo--;
 }
 
-function reload() {
-    if(player.health <= 0) return;
-    player.canShoot = false;
-    setTimeout(() => {
-        player.ammo = player.maxAmmo;
-        player.canShoot = true;
-    }, player.reloadTime);
+// ---------------- RELOAD ----------------
+
+function reload(){
+    player.ammo = player.maxAmmo;
 }
 
-function spawnEnemy() {
-    let side = Math.floor(Math.random()*4);
-    let enemy = {
-        width: 30,
-        height: 30,
-        color: 'red',
+// ---------------- SPAWN ENEMY ----------------
+
+function spawnEnemy(){
+
+    enemies.push({
+        x: Math.random()*canvas.width,
+        y: -20,
         health: 20,
-        speed: 2
-    };
-
-    switch(side){
-        case 0: // top
-            enemy.x = Math.random() * canvas.width;
-            enemy.y = -30;
-            break;
-        case 1: // bottom
-            enemy.x = Math.random() * canvas.width;
-            enemy.y = canvas.height + 30;
-            break;
-        case 2: // left
-            enemy.x = -30;
-            enemy.y = Math.random() * canvas.height;
-            break;
-        case 3: // right
-            enemy.x = canvas.width + 30;
-            enemy.y = Math.random() * canvas.height;
-            break;
-    }
-    enemies.push(enemy);
+        speed: 1.5,
+        width: 30,
+        height: 30
+    });
 }
 
-function rectCollision(a,b) {
-    return a.x < b.x + b.width &&
-           a.x + (a.width||5) > b.x &&
-           a.y < b.y + b.height &&
-           a.y + (a.height||5) > b.y;
+// ---------------- COLLISION ----------------
+
+function rectCollision(a,b){
+    return Math.abs(a.x - b.x) < 20 &&
+           Math.abs(a.y - b.y) < 20;
 }
 
-function restartGame() {
+// ---------------- RESTART ----------------
+
+function restartGame(){
+
     player.health = 100;
     player.ammo = player.maxAmmo;
-    bullets = [];
     enemies = [];
+    bullets = [];
     score = 0;
-    gameOverUI.style.display = 'none';
+
+    gameOverUI.style.display = "none";
 }
