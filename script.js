@@ -1,290 +1,339 @@
-const canvas = document.getElementById("game");
+const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const ammoUI = document.getElementById("ammoUI");
-const message = document.getElementById("message");
-const pauseBtn = document.getElementById("pauseBtn");
-
-let paused = false;
-pauseBtn.onclick = () => paused = !paused;
-
-// ---------------- PLAYER ----------------
-const player = {
-    x:450,
-    y:300,
-    hp:100,
-    maxHp:100,
-    ammo:20,
-    maxAmmo:20,
-    speed:4,
-    damage:10,
-    damageBoost:false,
-    damageTimer:0
-};
+const gameOverUI = document.getElementById("gameOver");
 
 let mouse = {x:0,y:0};
+
+canvas.addEventListener("mousemove", e=>{
+    let rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+});
+
+// PLAYER
+let player = {
+    x:450,
+    y:300,
+    health:100,
+    ammo:12,
+    maxAmmo:12,
+    speed:3,
+    oneShot:false,
+    oneShotTimer:0
+};
+
 let keys = {};
 let bullets = [];
 let enemies = [];
-let enemyBullets = [];
 let powerups = [];
 
-// ---------------- WAVES ----------------
-let wave = 1;
-let waveTimer = 60;
-let breakTimer = 0;
-let state = "wave";
-
-// ---------------- INPUT ----------------
-document.addEventListener("keydown",e=>{
+document.addEventListener("keydown", e=>{
     keys[e.key.toLowerCase()] = true;
+
     if(e.key==="r") player.ammo = player.maxAmmo;
-});
-document.addEventListener("keyup",e=>keys[e.key.toLowerCase()] = false);
-
-canvas.addEventListener("mousemove",e=>{
-    const r = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - r.left;
-    mouse.y = e.clientY - r.top;
+    if(e.key==="Enter" && player.health<=0) restart();
 });
 
-canvas.addEventListener("click",()=>{
-    if(player.ammo<=0 || paused) return;
-    shoot();
+document.addEventListener("keyup", e=>{
+    keys[e.key.toLowerCase()] = false;
 });
 
-// ---------------- LOOP ----------------
+canvas.addEventListener("click", shoot);
+
+// -------- LOOP --------
+
 function loop(){
-    if(!paused){
-        update();
-        draw();
-    }
+    update();
+    draw();
     requestAnimationFrame(loop);
 }
 loop();
 
-// ---------------- UPDATE ----------------
+// -------- UPDATE --------
+
 function update(){
 
-    // movement
-    if(keys.w) player.y -= player.speed;
-    if(keys.s) player.y += player.speed;
-    if(keys.a) player.x -= player.speed;
-    if(keys.d) player.x += player.speed;
+    if(player.health<=0) return;
 
-    // timers
-    if(state==="wave"){
-        waveTimer -= 1/60;
-        if(waveTimer<=0){
-            state="break";
-            breakTimer=15;
-            enemies=[];
-            enemyBullets=[];
-            showMessage("Wave voltooid");
-        }
-    }else{
-        breakTimer -= 1/60;
-        if(breakTimer<=0){
-            state="wave";
-            wave++;
-            waveTimer=60;
-            message.style.display="none";
+    if(keys["w"]) player.y -= player.speed;
+    if(keys["s"]) player.y += player.speed;
+    if(keys["a"]) player.x -= player.speed;
+    if(keys["d"]) player.x += player.speed;
+
+    if(Math.random()<0.02) spawnEnemy();
+    if(Math.random()<0.005) spawnPowerup();
+
+    // ONE SHOT TIMER
+    if(player.oneShot){
+        player.oneShotTimer -= 1/60;
+        if(player.oneShotTimer <=0){
+            player.oneShot=false;
         }
     }
 
-    // spawn enemies
-    if(state==="wave"){
-        if(wave===1 && Math.random()<0.02) spawnEnemy("normal");
-        if(wave===2 && Math.random()<0.015) spawnEnemy("spider");
-        if(wave===3 && enemies.length===0) spawnEnemy("boss");
-    }
-
-    // powerups elke 15 sec
-    if(Math.random()<0.002) spawnPowerup();
-
-    // bullets
     bullets.forEach((b,i)=>{
-        b.x+=b.vx; b.y+=b.vy;
-        enemies.forEach((e,j)=>{
-            if(dist(b,e)<20){
-                e.hp -= player.damageBoost ? player.damage+10 : player.damage;
+        b.x += b.vx;
+        b.y += b.vy;
+
+        enemies.forEach((enemy,j)=>{
+            if(dist(b,enemy)<18){
+
+                if(player.oneShot){
+                    enemy.health = 0;
+                }else{
+                    enemy.health -=10;
+                }
+
                 bullets.splice(i,1);
-                if(e.hp<=0) enemies.splice(j,1);
+
+                if(enemy.health<=0){
+                    enemies.splice(j,1);
+                }
             }
         });
     });
 
-    // enemies
-    enemies.forEach((e,i)=>{
-        let dx = player.x-e.x;
-        let dy = player.y-e.y;
-        let d = Math.hypot(dx,dy);
-        e.x += dx/d*e.speed;
-        e.y += dy/d*e.speed;
+    enemies.forEach((enemy,i)=>{
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let d = Math.sqrt(dx*dx+dy*dy);
 
-        if(e.type!=="boss" && d<25){
-            player.hp -= 10;
+        enemy.x += dx/d * enemy.speed;
+        enemy.y += dy/d * enemy.speed;
+
+        if(dist(enemy,player)<25){
+            player.health -=10;
             enemies.splice(i,1);
         }
-
-        if(e.type==="spider" && Math.random()<0.01){
-            enemyBullets.push({
-                x:e.x,y:e.y,
-                vx:dx/d*4,vy:dy/d*4,damage:5
-            });
-        }
-
-        if(e.type==="boss" && Math.random()<0.02){
-            enemyBullets.push({
-                x:e.x,y:e.y,
-                vx:dx/d*3,vy:dy/d*3,damage:20
-            });
-        }
     });
 
-    // enemy bullets
-    enemyBullets.forEach((b,i)=>{
-        b.x+=b.vx; b.y+=b.vy;
-        if(dist(b,player)<20){
-            player.hp -= b.damage;
-            enemyBullets.splice(i,1);
-        }
-    });
-
-    // powerups
+    // POWERUP PICKUP
     powerups.forEach((p,i)=>{
         if(dist(p,player)<30){
-            if(p.type==="health") player.hp=Math.min(100,player.hp+50);
-            if(p.type==="damage"){
-                player.damageBoost=true;
-                player.damageTimer=15;
+
+            if(p.type==="health"){
+                player.health = Math.min(100, player.health+50);
             }
+
+            if(p.type==="damage"){
+                player.oneShot = true;
+                player.oneShotTimer = 10;
+            }
+
             powerups.splice(i,1);
         }
     });
 
-    // damage timer
-    if(player.damageBoost){
-        player.damageTimer-=1/60;
-        if(player.damageTimer<=0) player.damageBoost=false;
-    }
+    ammoUI.textContent = "Ammo: " + player.ammo;
 
-    ammoUI.textContent="Ammo: "+player.ammo;
-
-    if(player.hp<=0){
-        showMessage("GAME OVER");
-        paused=true;
-    }
-
-    if(wave===4 && enemies.length===0){
-        showMessage("LEVEL VOLTOOID");
-        paused=true;
+    if(player.health<=0){
+        gameOverUI.style.display="block";
     }
 }
 
-// ---------------- DRAW ----------------
+// -------- DRAW --------
+
 function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    drawBackground();
 
     drawPlayer();
-    bullets.forEach(drawBullet);
+
+    bullets.forEach(drawLaser);
+
     enemies.forEach(drawEnemy);
-    enemyBullets.forEach(drawEnemyBullet);
+
     powerups.forEach(drawPowerup);
+
     drawHealthBar();
 }
 
-// ---------------- DRAW FUNCTIONS ----------------
+// -------- BACKGROUND --------
+
+function drawBackground(){
+    let gradient = ctx.createLinearGradient(0,0,0,canvas.height);
+    gradient.addColorStop(0,"#020024");
+    gradient.addColorStop(1,"#090979");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+// -------- PLAYER --------
+
 function drawPlayer(){
-    let a=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+
+    let angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+
     ctx.save();
     ctx.translate(player.x,player.y);
-    ctx.rotate(a);
+    ctx.rotate(angle);
 
     ctx.fillStyle="blue";
-    ctx.fillRect(-8,10,6,15);
-    ctx.fillRect(2,10,6,15);
-    ctx.fillRect(-10,-5,20,20);
-    ctx.fillRect(10,-2,25,4);
+    ctx.fillRect(-6,12,5,15);
+    ctx.fillRect(1,12,5,15);
+
+    ctx.fillRect(-10,-10,20,25);
+
+    ctx.fillRect(-15,-5,10,4);
+    ctx.fillRect(5,-5,10,4);
 
     ctx.fillStyle="#ffd1a6";
     ctx.beginPath();
-    ctx.arc(0,-15,8,0,Math.PI*2);
+    ctx.arc(0,-18,10,0,Math.PI*2);
     ctx.fill();
+
+    ctx.fillStyle="black";
+    ctx.fillRect(-3,-20,2,2);
+    ctx.fillRect(1,-20,2,2);
+
+    ctx.fillStyle="gray";
+    ctx.fillRect(10,-3,28,6);
 
     ctx.restore();
 }
 
-function drawEnemy(e){
-    ctx.fillStyle="red";
-    if(e.type==="boss"){
-        ctx.fillRect(e.x-40,e.y-40,80,80);
-    }else{
-        ctx.fillRect(e.x-10,e.y-10,20,20);
+// -------- ENEMY --------
+
+function drawEnemy(enemy){
+
+    ctx.fillStyle="darkred";
+    ctx.fillRect(enemy.x-5,enemy.y+10,4,12);
+    ctx.fillRect(enemy.x+1,enemy.y+10,4,12);
+
+    ctx.fillRect(enemy.x-10,enemy.y-10,20,20);
+
+    ctx.fillRect(enemy.x-18,enemy.y-5,8,4);
+    ctx.fillRect(enemy.x+10,enemy.y-5,8,4);
+
+    ctx.beginPath();
+    ctx.arc(enemy.x,enemy.y-18,10,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="black";
+    ctx.fillRect(enemy.x-4,enemy.y-20,3,3);
+    ctx.fillRect(enemy.x+1,enemy.y-20,3,3);
+
+    ctx.beginPath();
+    ctx.arc(enemy.x,enemy.y-14,5,0,Math.PI);
+    ctx.stroke();
+
+    ctx.fillStyle="black";
+    ctx.fillRect(enemy.x-15,enemy.y-35,30,5);
+
+    ctx.fillStyle="lime";
+    ctx.fillRect(enemy.x-15,enemy.y-35,30*(enemy.health/20),5);
+}
+
+// -------- POWERUPS --------
+
+function drawPowerup(p){
+
+    if(p.type==="health"){
+        ctx.fillStyle="green";
+        ctx.fillRect(p.x-15,p.y-15,30,30);
+
+        ctx.fillStyle="white";
+        ctx.font="14px Arial";
+        ctx.textAlign="center";
+        ctx.fillText("+50",p.x,p.y+5);
+    }
+
+    if(p.type==="damage"){
+        ctx.fillStyle="red";
+        ctx.fillRect(p.x-15,p.y-15,30,30);
+
+        ctx.fillStyle="white";
+        ctx.font="14px Arial";
+        ctx.textAlign="center";
+        ctx.fillText("+10",p.x,p.y+5);
     }
 }
 
-function drawBullet(b){
+// -------- LASER --------
+
+function drawLaser(b){
     ctx.strokeStyle="cyan";
+    ctx.lineWidth=3;
+
     ctx.beginPath();
     ctx.moveTo(b.x,b.y);
-    ctx.lineTo(b.x-b.vx*2,b.y-b.vy*2);
+    ctx.lineTo(b.x - b.vx*2, b.y - b.vy*2);
     ctx.stroke();
 }
 
-function drawEnemyBullet(b){
-    ctx.fillStyle="orange";
-    ctx.beginPath();
-    ctx.arc(b.x,b.y,6,0,Math.PI*2);
-    ctx.fill();
-}
-
-function drawPowerup(p){
-    ctx.fillStyle=p.type==="health"?"green":"red";
-    ctx.fillRect(p.x-15,p.y-15,30,30);
-    ctx.fillStyle="white";
-    ctx.fillText(p.type==="health"?"+50":"+10",p.x-10,p.y+5);
-}
+// -------- HEALTH BAR --------
 
 function drawHealthBar(){
+
     ctx.fillStyle="black";
-    ctx.fillRect(250,560,400,25);
+    ctx.fillRect(canvas.width/2-200,canvas.height-40,400,30);
+
     ctx.fillStyle="lime";
-    ctx.fillRect(250,560,400*(player.hp/100),25);
+    ctx.fillRect(canvas.width/2-200,canvas.height-40,400*(player.health/100),30);
+
+    ctx.fillStyle="white";
+    ctx.font="22px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("LEVEN: "+player.health, canvas.width/2, canvas.height-18);
 }
 
-// ---------------- HELPERS ----------------
+// -------- SHOOT --------
+
 function shoot(){
-    let dx=mouse.x-player.x;
-    let dy=mouse.y-player.y;
-    let d=Math.hypot(dx,dy);
-    bullets.push({x:player.x,y:player.y,vx:dx/d*8,vy:dy/d*8});
+
+    if(player.ammo<=0 || player.health<=0) return;
+
+    let dx = mouse.x-player.x;
+    let dy = mouse.y-player.y;
+    let d = Math.sqrt(dx*dx+dy*dy);
+
+    bullets.push({
+        x:player.x,
+        y:player.y,
+        vx:dx/d*9,
+        vy:dy/d*9
+    });
+
     player.ammo--;
 }
 
-function spawnEnemy(type){
+// -------- SPAWN --------
+
+function spawnEnemy(){
     enemies.push({
-        x:Math.random()*900,
+        x:Math.random()*canvas.width,
         y:-20,
-        hp:type==="boss"?500:type==="spider"?30:20,
-        speed:type==="boss"?0.8:type==="spider"?1.5:1.8,
-        type:type
+        health:20,
+        speed:1.3
     });
 }
 
 function spawnPowerup(){
+
+    let type = Math.random()<0.5 ? "health" : "damage";
+
     powerups.push({
-        x:Math.random()*900,
-        y:Math.random()*600,
-        type:Math.random()<0.5?"health":"damage"
+        x:Math.random()*canvas.width,
+        y:Math.random()*canvas.height,
+        type:type
     });
 }
 
-function showMessage(t){
-    message.textContent=t;
-    message.style.display="block";
-}
+// -------- UTILS --------
 
 function dist(a,b){
-    return Math.hypot(a.x-b.x,a.y-b.y);
+    return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
+}
+
+function restart(){
+    player.health=100;
+    player.ammo=12;
+    player.oneShot=false;
+    enemies=[];
+    bullets=[];
+    powerups=[];
+    gameOverUI.style.display="none";
 }
