@@ -2,16 +2,18 @@ body{
     margin:0;
     overflow:hidden;
     background:black;
-    font-family:Arial;
+    font-family:Arial, sans-serif;
 }
 
-#gameCanvas{
+/* Canvas */
+#game{
     display:block;
     margin:auto;
     border:2px solid white;
     background:#050505;
 }
 
+/* Ammo linksboven */
 #ammoUI{
     position:absolute;
     left:20px;
@@ -19,8 +21,10 @@ body{
     color:cyan;
     font-size:26px;
     font-weight:bold;
+    z-index:10;
 }
 
+/* Game over tekst */
 #gameOver{
     position:absolute;
     top:50%;
@@ -29,4 +33,16 @@ body{
     color:red;
     font-size:60px;
     display:none;
+    z-index:20;
+}
+
+/* Pauzeknop */
+#pauseBtn{
+    position:absolute;
+    top:15px;
+    left:15px;
+    font-size:18px;
+    padding:6px 12px;
+    cursor:pointer;
+    z-index:30;
 }
