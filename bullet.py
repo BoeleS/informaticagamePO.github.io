@@ -1,34 +1,41 @@
 import pygame
 from settings import *
-from math import sqrt
 
-class Bullet(pygame.sprite.Sprite):
-    def __init__(self, x, y, direction, damage):
+
+class Projectile(pygame.sprite.Sprite):
+    def __init__(self, x, y, target_pos, speed, color, size, damage):
         super().__init__()
-        self.image = pygame.Surface((10, 5))
-        self.image.fill(YELLOW)
+        self.image = pygame.Surface(size, pygame.SRCALPHA)
+        pygame.draw.circle(self.image, color, (size[0] // 2, size[1] // 2), size[0] // 2)
         self.rect = self.image.get_rect(center=(x, y))
-        self.speed = BULLET_SPEED
-        self.direction = direction
+        direction = pygame.math.Vector2(target_pos) - pygame.math.Vector2(x, y)
+        if direction.length() == 0:
+            direction = pygame.math.Vector2(1, 0)
+        self.velocity = direction.normalize() * speed
         self.damage = damage
 
     def update(self):
-        self.rect.x += self.speed * self.direction
-        if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH:
+        self.rect.x += self.velocity.x
+        self.rect.y += self.velocity.y
+        if (
+            self.rect.right < 0
+            or self.rect.left > SCREEN_WIDTH
+            or self.rect.top < 0
+            or self.rect.bottom > SCREEN_HEIGHT
+        ):
             self.kill()
 
-class Web(Bullet):
-    def __init__(self, x, y, player):
-        super().__init__(x, y, 0, 5)
-        self.image = pygame.Surface((10, 10))
-        self.image.fill((0, 200, 200))
-        dx = player.rect.centerx - x
-        dy = player.rect.centery - y
-        distance = max(sqrt(dx**2 + dy**2), 1)
-        self.velocity = (dx/distance*5, dy/distance*5)
 
-    def update(self):
-        self.rect.x += self.velocity[0]
-        self.rect.y += self.velocity[1]
-        if self.rect.right < 0 or self.rect.left > SCREEN_WIDTH or self.rect.top < 0 or self.rect.bottom > SCREEN_HEIGHT:
-            self.kill()
+class Bullet(Projectile):
+    def __init__(self, x, y, target_pos, damage):
+        super().__init__(x, y, target_pos, BULLET_SPEED, YELLOW, (10, 10), damage)
+
+
+class Web(Projectile):
+    def __init__(self, x, y, target_pos):
+        super().__init__(x, y, target_pos, WEB_SPEED, WEB_COLOR, (12, 12), WEB_DAMAGE)
+
+
+class Fireball(Projectile):
+    def __init__(self, x, y, target_pos):
+        super().__init__(x, y, target_pos, FIREBALL_SPEED, FIREBALL_COLOR, (16, 16), FIREBALL_DAMAGE)
