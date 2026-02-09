@@ -62,7 +62,8 @@
         </div>
         <div class="legend">
           WASD = bewegen<br />
-          Klik of spatie = schieten
+          Klik of spatie = schieten<br />
+          R = herladen
         </div>
         <div class="message" id="message" style="display: none">Wave voltooid!</div>
       </div>
@@ -108,6 +109,9 @@
       window.addEventListener("keydown", (event) => {
         keys.add(event.key.toLowerCase());
         if (event.key === " ") shootBullet();
+        if (event.key.toLowerCase() === "r") {
+          state.player.ammo = settings.ammoCapacity;
+        }
       });
       window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
       canvas.addEventListener("click", shootBullet);
@@ -243,9 +247,40 @@
       function drawPlayer() {
         ctx.save();
         ctx.translate(state.player.x, state.player.y);
-        ctx.fillStyle = "#3b82f6"; ctx.beginPath(); ctx.arc(0,0,settings.playerRadius,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-8,4); ctx.quadraticCurveTo(0,12,8,4); ctx.stroke();
-        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-6,-4,3,0,Math.PI*2); ctx.arc(6,-4,3,0,Math.PI*2); ctx.fill();
+
+        // armen & benen
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-16, 10); ctx.lineTo(-28, 22);
+        ctx.moveTo(16, 10);  ctx.lineTo(28, 22);
+        ctx.moveTo(-6, 20);  ctx.lineTo(-12, 36);
+        ctx.moveTo(6, 20);   ctx.lineTo(12, 36);
+        ctx.stroke();
+
+        // wapen
+        ctx.fillStyle = "#111827";
+        ctx.fillRect(18, 4, 16, 6);
+        ctx.fillRect(30, 2, 6, 10);
+
+        // hoofd
+        ctx.fillStyle = "#3b82f6";
+        ctx.beginPath();
+        ctx.arc(0, 0, settings.playerRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // blij gezicht
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-8, 4); ctx.quadraticCurveTo(0, 12, 8, 4);
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(-6, -4, 3, 0, Math.PI * 2);
+        ctx.arc(6, -4, 3, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.restore();
       }
 
@@ -261,6 +296,26 @@
             ctx.fillStyle = "#facc15"; ctx.beginPath(); ctx.arc(-20,-10,8,0,Math.PI*2); ctx.arc(20,-10,8,0,Math.PI*2); ctx.fill();
           } else if (e.type === "spider") { ctx.fillStyle = "#a855f7"; ctx.beginPath(); ctx.arc(0,0,e.radius,0,Math.PI*2); ctx.fill();
           } else { ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(0,0,e.radius,0,Math.PI*2); ctx.fill(); }
+
+          // armen & benen
+          ctx.strokeStyle = "#111827";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-14, 6); ctx.lineTo(-24, 18);
+          ctx.moveTo(14, 6);  ctx.lineTo(24, 18);
+          ctx.moveTo(-6, 18); ctx.lineTo(-12, 30);
+          ctx.moveTo(6, 18);  ctx.lineTo(12, 30);
+          ctx.stroke();
+
+          // eng gezicht
+          ctx.beginPath();
+          ctx.moveTo(-8, -4); ctx.lineTo(-2, 2);
+          ctx.moveTo(8, -4);  ctx.lineTo(2, 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(0, 8, 8, 3.5, 5.8);
+          ctx.stroke();
+
           ctx.restore();
         });
       }
