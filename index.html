@@ -2,53 +2,302 @@
 <html lang="nl">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Informatica Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shooter Game</title>
     <style>
+      :root { color-scheme: dark; }
       body {
         margin: 0;
-        font-family: Arial, sans-serif;
-        background: #0f0f14;
-        color: #ffffff;
-        display: grid;
-        place-items: center;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #0f1115;
+        color: #fff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
         min-height: 100vh;
-        text-align: center;
       }
-      .card {
-        max-width: 700px;
-        padding: 32px;
-        background: #1b1b25;
+      .game-wrapper { position: relative; }
+      canvas {
+        background: #111827;
+        border: 3px solid #1f2937;
         border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        display: block;
       }
-      h1 {
-        margin-top: 0;
-        font-size: 2rem;
+      .hud { position: absolute; inset: 0; pointer-events: none; }
+      .ammo {
+        position: absolute; top: 16px; left: 16px;
+        background: rgba(17,24,39,0.8); padding: 8px 12px; border-radius: 8px;
       }
-      p {
-        line-height: 1.6;
+      .pause-btn {
+        position: absolute; top: 16px; left: 16px; margin-top: 48px;
+        pointer-events: auto; background: #374151; border: none; color: #fff;
+        padding: 8px 12px; border-radius: 8px; cursor: pointer;
       }
-      .btn {
-        display: inline-block;
-        margin-top: 16px;
-        padding: 12px 18px;
-        background: #2b8cff;
-        color: white;
-        text-decoration: none;
-        border-radius: 8px;
+      .health {
+        position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+        width: 240px; background: #1f2937; border-radius: 999px; padding: 6px;
+      }
+      .health-bar { height: 14px; background: #16a34a; border-radius: 999px; }
+      .health-text { text-align: center; font-size: 14px; margin-top: 4px; }
+      .message {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        font-size: 36px; font-weight: 700; color: #fff; text-shadow: 0 4px 10px rgba(0,0,0,0.6);
+      }
+      .legend {
+        position: absolute; top: 16px; right: 16px;
+        background: rgba(17,24,39,0.8); padding: 8px 12px; border-radius: 8px;
+        font-size: 14px; line-height: 1.4;
       }
     </style>
   </head>
   <body>
-    <div class="card">
-      <h1>Welkom bij mijn shooter game</h1>
-      <p>Deze website is de homepagina van mijn project.  
-         Het spel zelf is in Python (pygame). Later kan ik hier een web‑versie of video plaatsen.</p>
-      <p>Besturing in de game: <strong>WASD</strong> om te bewegen, <strong>Spatie</strong> om te schieten.</p>
-      <a class="btn" href="https://github.com/informaticagamePO/informaticagamePO.github.io">
-        Bekijk de code op GitHub
-      </a>
+    <div class="game-wrapper">
+      <canvas id="game" width="900" height="600"></canvas>
+      <div class="hud">
+        <div class="ammo" id="ammo">Ammo: 20</div>
+        <button class="pause-btn" id="pauseBtn">Pauze</button>
+        <div class="health">
+          <div class="health-bar" id="healthBar"></div>
+          <div class="health-text" id="healthText">HP: 100</div>
+        </div>
+        <div class="legend">
+          WASD = bewegen<br />
+          Klik of spatie = schieten
+        </div>
+        <div class="message" id="message" style="display: none">Wave voltooid!</div>
+      </div>
     </div>
+
+    <script>
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const ammoEl = document.getElementById("ammo");
+      const healthBar = document.getElementById("healthBar");
+      const healthText = document.getElementById("healthText");
+      const messageEl = document.getElementById("message");
+      const pauseBtn = document.getElementById("pauseBtn");
+
+      const settings = {
+        playerSpeed: 3.8,
+        playerRadius: 20,
+        playerMaxHp: 100,
+        enemySpeed: 1.8,
+        bulletSpeed: 6,
+        bulletDamage: 10,
+        ammoCapacity: 20,
+        waveDuration: 60000,
+        restDuration: 15000,
+        powerupInterval: 15000,
+        powerupDuration: 15000,
+      };
+
+      const state = {
+        player: { x: canvas.width / 2, y: canvas.height / 2, hp: settings.playerMaxHp, ammo: settings.ammoCapacity, damage: settings.bulletDamage, buffTimer: 0 },
+        bullets: [], enemies: [], enemyProjectiles: [], powerups: [],
+        wave: 1, waveTimeLeft: settings.waveDuration, restTimeLeft: 0, lastPowerup: 0,
+        paused: false, message: "", lastTime: performance.now(),
+      };
+
+      const keys = new Set();
+
+      pauseBtn.addEventListener("click", () => {
+        state.paused = !state.paused;
+        pauseBtn.textContent = state.paused ? "Doorgaan" : "Pauze";
+      });
+
+      window.addEventListener("keydown", (event) => {
+        keys.add(event.key.toLowerCase());
+        if (event.key === " ") shootBullet();
+      });
+      window.addEventListener("keyup", (event) => keys.delete(event.key.toLowerCase()));
+      canvas.addEventListener("click", shootBullet);
+
+      function shootBullet() {
+        if (state.paused || state.player.ammo <= 0 || state.restTimeLeft > 0) return;
+        const target = state.lastMouse || { x: state.player.x + 1, y: state.player.y };
+        state.bullets.push({
+          x: state.player.x, y: state.player.y,
+          vx: (target.x - state.player.x) / 30, vy: (target.y - state.player.y) / 30,
+          damage: state.player.damage,
+        });
+        state.player.ammo -= 1;
+      }
+
+      canvas.addEventListener("mousemove", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        state.lastMouse = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      });
+
+      function spawnWave() {
+        state.enemies = []; state.enemyProjectiles = [];
+        if (state.wave === 1) for (let i = 0; i < 6; i++) spawnEnemy("grunt");
+        else if (state.wave === 2) for (let i = 0; i < 6; i++) spawnEnemy("spider");
+        else if (state.wave === 3) state.enemies.push({ type: "boss", x: canvas.width / 2, y: 120, hp: 500, radius: 80, shootTimer: 0 });
+      }
+
+      function spawnEnemy(type) {
+        const margin = 40;
+        state.enemies.push({
+          type,
+          x: Math.random() * (canvas.width - margin * 2) + margin,
+          y: Math.random() * (canvas.height - margin * 2) + margin,
+          hp: type === "spider" ? 30 : 20,
+          radius: type === "spider" ? 24 : 20,
+          shootTimer: 0,
+        });
+      }
+
+      function spawnPowerup() {
+        const type = Math.random() > 0.5 ? "heal" : "damage";
+        state.powerups.push({ type, x: Math.random() * (canvas.width - 80) + 40, y: Math.random() * (canvas.height - 80) + 40, size: 28 });
+      }
+
+      function update(delta) {
+        if (state.paused) return;
+
+        if (state.restTimeLeft > 0) {
+          state.restTimeLeft -= delta;
+          if (state.restTimeLeft <= 0) { state.wave += 1; if (state.wave <= 3) { state.waveTimeLeft = settings.waveDuration; spawnWave(); showMessage(""); } }
+          return;
+        }
+
+        state.waveTimeLeft -= delta;
+        if (state.wave <= 2 && state.waveTimeLeft <= 0) {
+          state.enemies = []; state.enemyProjectiles = []; state.restTimeLeft = settings.restDuration;
+          showMessage("Wave voltooid!"); return;
+        }
+        if (state.wave === 3 && state.enemies.length === 0) { showMessage("Level voltooid!"); return; }
+
+        if (state.player.buffTimer > 0) {
+          state.player.buffTimer -= delta;
+          if (state.player.buffTimer <= 0) state.player.damage = settings.bulletDamage;
+        }
+
+        state.lastPowerup += delta;
+        if (state.lastPowerup >= settings.powerupInterval) { state.lastPowerup = 0; spawnPowerup(); }
+
+        movePlayer(); updateBullets(); updateEnemies(delta); updateEnemyProjectiles(); checkPowerups();
+      }
+
+      function movePlayer() {
+        const speed = settings.playerSpeed;
+        if (keys.has("w")) state.player.y -= speed;
+        if (keys.has("s")) state.player.y += speed;
+        if (keys.has("a")) state.player.x -= speed;
+        if (keys.has("d")) state.player.x += speed;
+        state.player.x = Math.max(settings.playerRadius, Math.min(canvas.width - settings.playerRadius, state.player.x));
+        state.player.y = Math.max(settings.playerRadius, Math.min(canvas.height - settings.playerRadius, state.player.y));
+      }
+
+      function updateBullets() {
+        state.bullets.forEach((b) => { b.x += b.vx * settings.bulletSpeed; b.y += b.vy * settings.bulletSpeed; });
+        state.bullets = state.bullets.filter((b) => b.x > 0 && b.x < canvas.width && b.y > 0 && b.y < canvas.height);
+        state.bullets.forEach((b) => state.enemies.forEach((e) => { if (distance(b, e) < e.radius) { e.hp -= b.damage; b.hit = true; } }));
+        state.bullets = state.bullets.filter((b) => !b.hit);
+        state.enemies = state.enemies.filter((e) => e.hp > 0);
+      }
+
+      function updateEnemies(delta) {
+        state.enemies.forEach((e) => {
+          const dx = state.player.x - e.x, dy = state.player.y - e.y, len = Math.hypot(dx, dy) || 1;
+          const speed = e.type === "boss" ? 1 : settings.enemySpeed;
+          e.x += (dx / len) * speed; e.y += (dy / len) * speed;
+
+          if (distance(e, state.player) < e.radius + settings.playerRadius) state.player.hp -= e.type === "boss" ? 20 : 10;
+
+          e.shootTimer += delta;
+          if (e.type === "spider" && e.shootTimer > 1400) { e.shootTimer = 0; shootEnemyProjectile(e, "web"); }
+          if (e.type === "boss" && e.shootTimer > 1000) { e.shootTimer = 0; shootEnemyProjectile(e, "fire"); }
+        });
+      }
+
+      function shootEnemyProjectile(e, type) {
+        const dx = state.player.x - e.x, dy = state.player.y - e.y, len = Math.hypot(dx, dy) || 1;
+        state.enemyProjectiles.push({ type, x: e.x, y: e.y, vx: (dx / len) * 3, vy: (dy / len) * 3 });
+      }
+
+      function updateEnemyProjectiles() {
+        state.enemyProjectiles.forEach((s) => {
+          s.x += s.vx; s.y += s.vy;
+          if (distance(s, state.player) < settings.playerRadius) { state.player.hp -= s.type === "fire" ? 20 : 5; s.hit = true; }
+        });
+        state.enemyProjectiles = state.enemyProjectiles.filter((s) => !s.hit && s.x > 0 && s.x < canvas.width && s.y > 0 && s.y < canvas.height);
+      }
+
+      function checkPowerups() {
+        state.powerups.forEach((p) => {
+          if (Math.hypot(state.player.x - p.x, state.player.y - p.y) < settings.playerRadius + p.size / 2) {
+            if (p.type === "heal") state.player.hp = Math.min(settings.playerMaxHp, state.player.hp + 50);
+            else { state.player.damage = settings.bulletDamage + 10; state.player.buffTimer = settings.powerupDuration; }
+            p.hit = true;
+          }
+        });
+        state.powerups = state.powerups.filter((p) => !p.hit);
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawPlayer(); drawBullets(); drawEnemies(); drawEnemyProjectiles(); drawPowerups(); updateHud();
+      }
+
+      function drawPlayer() {
+        ctx.save();
+        ctx.translate(state.player.x, state.player.y);
+        ctx.fillStyle = "#3b82f6"; ctx.beginPath(); ctx.arc(0,0,settings.playerRadius,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-8,4); ctx.quadraticCurveTo(0,12,8,4); ctx.stroke();
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-6,-4,3,0,Math.PI*2); ctx.arc(6,-4,3,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+
+      function drawBullets() {
+        ctx.fillStyle = "#facc15";
+        state.bullets.forEach((b) => { ctx.beginPath(); ctx.arc(b.x,b.y,4,0,Math.PI*2); ctx.fill(); });
+      }
+
+      function drawEnemies() {
+        state.enemies.forEach((e) => {
+          ctx.save(); ctx.translate(e.x,e.y);
+          if (e.type === "boss") { ctx.fillStyle = "#16a34a"; ctx.beginPath(); ctx.arc(0,0,e.radius,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle = "#facc15"; ctx.beginPath(); ctx.arc(-20,-10,8,0,Math.PI*2); ctx.arc(20,-10,8,0,Math.PI*2); ctx.fill();
+          } else if (e.type === "spider") { ctx.fillStyle = "#a855f7"; ctx.beginPath(); ctx.arc(0,0,e.radius,0,Math.PI*2); ctx.fill();
+          } else { ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(0,0,e.radius,0,Math.PI*2); ctx.fill(); }
+          ctx.restore();
+        });
+      }
+
+      function drawEnemyProjectiles() {
+        state.enemyProjectiles.forEach((s) => {
+          ctx.fillStyle = s.type === "fire" ? "#f97316" : "#22d3ee";
+          ctx.beginPath(); ctx.arc(s.x,s.y,6,0,Math.PI*2); ctx.fill();
+        });
+      }
+
+      function drawPowerups() {
+        state.powerups.forEach((p) => {
+          ctx.fillStyle = p.type === "heal" ? "#22c55e" : "#ef4444";
+          ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+          ctx.fillStyle = "#fff"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
+          ctx.fillText(p.type === "heal" ? "50+" : "+10", p.x, p.y + 4);
+        });
+      }
+
+      function updateHud() {
+        ammoEl.textContent = `Ammo: ${state.player.ammo}`;
+        healthBar.style.width = `${(state.player.hp / settings.playerMaxHp) * 100}%`;
+        healthText.textContent = `HP: ${Math.max(0, Math.round(state.player.hp))}`;
+      }
+
+      function showMessage(text) { messageEl.textContent = text; messageEl.style.display = text ? "flex" : "none"; }
+      const distance = (a,b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+      function loop(time) {
+        const delta = time - state.lastTime;
+        state.lastTime = time;
+        update(delta); draw();
+        requestAnimationFrame(loop);
+      }
+      spawnWave();
+      requestAnimationFrame(loop);
+    </script>
   </body>
 </html>
